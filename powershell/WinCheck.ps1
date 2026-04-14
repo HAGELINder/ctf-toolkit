@@ -1,10 +1,10 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    WinCheck.ps1 — Windows privilege escalation checker (PowerShell rewrite of wincheck.py)
+    WinCheck.ps1 - Windows privilege escalation checker (PowerShell rewrite of wincheck.py)
 
 .DESCRIPTION
-    Pure PowerShell — no Python, no pip, no external tools.
+    Pure PowerShell - no Python, no pip, no external tools.
     Uses native cmdlets and WMI throughout. Runs anywhere PowerShell 5.1+ exists.
 
 .PARAMETER Section
@@ -34,14 +34,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "SilentlyContinue"
 
-# ── Colours ────────────────────────────────────────────────────────────────────
+# -- Colours --------------------------------------------------------------------
 $Report = [System.Collections.Generic.List[string]]::new()
 
 # Bug fix: previously Out-Line was defined but never called by any output function,
 # so $Report stayed empty and -Out always wrote a blank file.
 # Each function now writes to both the console (with colour) and $Report (plain text).
 function Write-Banner { param($t)
-    $bar = "═" * 64
+    $bar = "=" * 64
     Write-Host "`n$bar" -ForegroundColor Cyan
     Write-Host "  $t"   -ForegroundColor Cyan
     Write-Host $bar     -ForegroundColor Cyan
@@ -53,7 +53,7 @@ function Write-Good { param($m) Write-Host "  [+] $m" -ForegroundColor Green;  $
 function Write-Info { param($m) Write-Host "  [-] $m" -ForegroundColor Gray;   $script:Report.Add("  [-] $m") }
 function Write-Sub  { param($m) Write-Host "      $m";                          $script:Report.Add("      $m") }
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# -- Helpers --------------------------------------------------------------------
 function Run { param($cmd)
     try { cmd /c $cmd 2>&1 } catch { "" }
 }
@@ -73,7 +73,7 @@ function Get-Acl-Write { param($path)
     return $false
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-SysInfo {
     Write-Banner "SYSTEM INFO"
     Write-Info "Hostname   : $env:COMPUTERNAME"
@@ -85,35 +85,35 @@ function Get-SysInfo {
 
     $spooler = Get-Service Spooler -EA SilentlyContinue
     if ($spooler -and $spooler.Status -eq "Running") {
-        Write-Hit "Print Spooler RUNNING — check PrintNightmare (CVE-2021-1675 / CVE-2021-34527)"
+        Write-Hit "Print Spooler RUNNING - check PrintNightmare (CVE-2021-1675 / CVE-2021-34527)"
     }
 
     $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber
-    if ($build -lt 19041) { Write-Hit "Build $build — check CVE-2020-0796 (SMBGhost)" }
-    if ($build -lt 17763) { Write-Hit "Build $build — check MS17-010 (EternalBlue), CVE-2019-0708 (BlueKeep)" }
+    if ($build -lt 19041) { Write-Hit "Build $build - check CVE-2020-0796 (SMBGhost)" }
+    if ($build -lt 17763) { Write-Hit "Build $build - check MS17-010 (EternalBlue), CVE-2019-0708 (BlueKeep)" }
 
     Write-Info "`nLast 10 patches:"
     Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 10 |
         ForEach-Object { Write-Sub "$($_.HotFixID)  $($_.InstalledOn)" }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Tokens {
     Write-Banner "TOKEN PRIVILEGES"
     $privs = whoami /priv
     $privs | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
 
     $attacks = @{
-        "SeImpersonatePrivilege"        = "Potato attacks — JuicyPotato, PrintSpoofer, RoguePotato"
-        "SeAssignPrimaryTokenPrivilege" = "Potato attacks — same as SeImpersonate"
+        "SeImpersonatePrivilege"        = "Potato attacks - JuicyPotato, PrintSpoofer, RoguePotato"
+        "SeAssignPrimaryTokenPrivilege" = "Potato attacks - same as SeImpersonate"
         "SeBackupPrivilege"             = "reg save HKLM\SAM then secretsdump offline"
         "SeRestorePrivilege"            = "Overwrite system binaries"
         "SeDebugPrivilege"              = "Inject into SYSTEM processes / dump LSASS"
-        "SeLoadDriverPrivilege"         = "Load unsigned kernel driver — kernel code exec"
-        "SeManageVolumePrivilege"       = "Direct disk write — overwrite any sector"
+        "SeLoadDriverPrivilege"         = "Load unsigned kernel driver - kernel code exec"
+        "SeManageVolumePrivilege"       = "Direct disk write - overwrite any sector"
         "SeTakeOwnershipPrivilege"      = "Take ownership of any object, then grant access"
-        "SeCreateTokenPrivilege"        = "Create token with arbitrary groups — direct SYSTEM"
-        "SeTcbPrivilege"                = "Act as OS — create tokens, logon any user"
+        "SeCreateTokenPrivilege"        = "Create token with arbitrary groups - direct SYSTEM"
+        "SeTcbPrivilege"                = "Act as OS - create tokens, logon any user"
         "SeRelabelPrivilege"            = "Raise object integrity level"
         "SeCreateSymbolicLinkPrivilege" = "Symlink attacks on privileged file paths"
     }
@@ -123,7 +123,7 @@ function Get-Tokens {
         if ($privs -match $priv) {
             $state = if ($privs -match "$priv.*Disabled") { "DISABLED" } else { "ENABLED" }
             if ($state -eq "ENABLED") {
-                Write-Hit "$priv — $($attacks[$priv])"
+                Write-Hit "$priv - $($attacks[$priv])"
             } else {
                 Write-Warn "$priv present but DISABLED (may be enableable)"
             }
@@ -131,12 +131,12 @@ function Get-Tokens {
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Services {
-    Write-Banner "SERVICES — UNQUOTED PATHS & WEAK PERMISSIONS"
+    Write-Banner "SERVICES - UNQUOTED PATHS & WEAK PERMISSIONS"
 
     Write-Info "Unquoted service paths:"
-    # Bug fix: Get-WmiObject removed in PowerShell 7+ — use Get-CimInstance throughout
+    # Bug fix: Get-WmiObject removed in PowerShell 7+ - use Get-CimInstance throughout
     Get-CimInstance Win32_Service | Where-Object {
         $_.PathName -and
         $_.PathName -notmatch '^"' -and
@@ -170,7 +170,7 @@ function Get-Services {
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-RegistryChecks {
     Write-Banner "REGISTRY"
 
@@ -204,7 +204,7 @@ function Get-RegistryChecks {
             Write-Info "  $key"
             $props.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' } | ForEach-Object {
                 Write-Sub "    $($_.Name) = $($_.Value)"
-                # Bug fix: $_.Value can be null — calling .ToString() on null throws
+                # Bug fix: $_.Value can be null - calling .ToString() on null throws
                 if ($null -eq $_.Value) { return }
                 $bin = ([regex]::Match($_.Value.ToString(), '"?([A-Za-z]:\\[^"]+\.exe)')).Groups[1].Value
                 if ($bin -and (Test-Path $bin) -and (Get-Acl-Write $bin)) {
@@ -240,7 +240,7 @@ function Get-RegistryChecks {
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Tasks {
     Write-Banner "SCHEDULED TASKS"
     Get-ScheduledTask | Where-Object { $_.Principal.UserId -match "SYSTEM|Administrator" } |
@@ -265,22 +265,22 @@ function Get-Tasks {
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Paths {
-    Write-Banner "PATH — DLL / EXE HIJACK"
+    Write-Banner "PATH - DLL / EXE HIJACK"
     $pathDirs = $env:PATH -split ";"
     foreach ($d in $pathDirs) {
-        if (!$d) { Write-Hit "Empty PATH entry — current directory DLL hijack possible"; continue }
+        if (!$d) { Write-Hit "Empty PATH entry - current directory DLL hijack possible"; continue }
         Write-Info $d
         if (!(Test-Path $d)) {
-            Write-Hit "  Missing PATH dir — create to hijack: $d"
+            Write-Hit "  Missing PATH dir - create to hijack: $d"
         } elseif (Get-Acl-Write $d) {
-            Write-Hit "  Writable PATH dir: $d — drop malicious DLL/EXE"
+            Write-Hit "  Writable PATH dir: $d - drop malicious DLL/EXE"
         }
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Files {
     Write-Banner "INTERESTING FILES"
 
@@ -309,7 +309,7 @@ function Get-Files {
         if (Test-Path $_) {
             try {
                 [IO.File]::OpenRead($_).Close()
-                Write-Hit "READABLE: $_ — copy with reg save, then secretsdump offline"
+                Write-Hit "READABLE: $_ - copy with reg save, then secretsdump offline"
             } catch {
                 Write-Info "Exists but locked: $_"
             }
@@ -318,7 +318,7 @@ function Get-Files {
 
     if (!$Fast) {
         Write-Host ""
-        Write-Info "Searching for password files (slow — use -Fast to skip):"
+        Write-Info "Searching for password files (slow - use -Fast to skip):"
         $roots = @($env:USERPROFILE, "C:\inetpub", "C:\xampp", $env:ProgramFiles)
         foreach ($r in $roots) {
             if (!(Test-Path $r)) { continue }
@@ -330,7 +330,7 @@ function Get-Files {
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Users {
     Write-Banner "LOCAL USERS & GROUPS"
     Write-Info "Local users:"
@@ -341,7 +341,7 @@ function Get-Users {
     Run "query session" | ForEach-Object { Write-Sub $_ }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Network {
     Write-Banner "NETWORK"
     Write-Info "Listening ports:"
@@ -359,7 +359,7 @@ function Get-Network {
     Get-NetFirewallProfile | Format-Table Name, Enabled, DefaultInboundAction -AutoSize | Out-String | Write-Host
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 function Get-Uac {
     Write-Banner "UAC"
     $uacKey  = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
@@ -371,7 +371,7 @@ function Get-Uac {
     Write-Info "ConsentPromptBehaviorAdmin    : $consent"
 
     $levels = @{
-        0 = "Elevate silently — no prompt (most permissive)"
+        0 = "Elevate silently - no prompt (most permissive)"
         1 = "Prompt for credentials on secure desktop"
         2 = "Prompt for consent on secure desktop"
         3 = "Prompt for credentials"
@@ -384,14 +384,14 @@ function Get-Uac {
     if ($null -ne $consent) {
         $consentInt = [int]$consent
         if ($levels.ContainsKey($consentInt)) {
-            Write-Info "  → $($levels[$consentInt])"
+            Write-Info "  -> $($levels[$consentInt])"
         }
         if ($consentInt -in @(0,4,5)) {
-            Write-Hit "UAC level $consentInt — fodhelper, eventvwr, or other auto-elevate bypasses likely work"
+            Write-Hit "UAC level $consentInt - fodhelper, eventvwr, or other auto-elevate bypasses likely work"
         }
     }
     if ($null -ne $lual -and [int]$lual -eq 0) {
-        Write-Hit "EnableLUA = 0 — UAC completely disabled!"
+        Write-Hit "EnableLUA = 0 - UAC completely disabled!"
     }
 
     # Check current integrity
@@ -400,11 +400,11 @@ function Get-Uac {
     if ($groups -match "S-1-16-12288") { Write-Good "Current integrity: HIGH (already elevated)" }
     if ($groups -match "S-1-16-16384") { Write-Good "Current integrity: SYSTEM" }
     if ($groups -match "S-1-5-32-544" -and $groups -match "S-1-16-8192") {
-        Write-Hit "Local admin at MEDIUM integrity — UAC bypass → SYSTEM"
+        Write-Hit "Local admin at MEDIUM integrity - UAC bypass -> SYSTEM"
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 $allSections = [ordered]@{
     sysinfo  = { Get-SysInfo }
     tokens   = { Get-Tokens }
@@ -420,7 +420,7 @@ $allSections = [ordered]@{
 
 $startTime = Get-Date
 Write-Host "`n$('='*64)" -ForegroundColor Cyan
-Write-Host "  WinCheck.ps1 — Windows Privesc Checker" -ForegroundColor Cyan
+Write-Host "  WinCheck.ps1 - Windows Privesc Checker" -ForegroundColor Cyan
 Write-Host "  $(Get-Date -f 'yyyy-MM-dd HH:mm:ss')  |  $env:COMPUTERNAME\$(whoami)" -ForegroundColor Cyan
 Write-Host "$('='*64)`n" -ForegroundColor Cyan
 

