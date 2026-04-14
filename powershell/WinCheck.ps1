@@ -35,23 +35,23 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "SilentlyContinue"
 
 # ── Colours ────────────────────────────────────────────────────────────────────
+$Report = [System.Collections.Generic.List[string]]::new()
+
+# Bug fix: previously Out-Line was defined but never called by any output function,
+# so $Report stayed empty and -Out always wrote a blank file.
+# Each function now writes to both the console (with colour) and $Report (plain text).
 function Write-Banner { param($t)
     $bar = "═" * 64
     Write-Host "`n$bar" -ForegroundColor Cyan
     Write-Host "  $t"   -ForegroundColor Cyan
     Write-Host $bar     -ForegroundColor Cyan
+    $script:Report.Add("`n$bar"); $script:Report.Add("  $t"); $script:Report.Add($bar)
 }
-function Write-Hit  { param($m) Write-Host "  [!] $m" -ForegroundColor Red    }
-function Write-Warn { param($m) Write-Host "  [*] $m" -ForegroundColor Yellow }
-function Write-Good { param($m) Write-Host "  [+] $m" -ForegroundColor Green  }
-function Write-Info { param($m) Write-Host "  [-] $m" -ForegroundColor Gray   }
-function Write-Sub  { param($m) Write-Host "      $m"                          }
-
-$Report = [System.Collections.Generic.List[string]]::new()
-function Out-Line { param($m)
-    $Report.Add(($m -replace '\x1b\[[0-9;]*m', ''))
-    Write-Host $m
-}
+function Write-Hit  { param($m) Write-Host "  [!] $m" -ForegroundColor Red;    $script:Report.Add("  [!] $m") }
+function Write-Warn { param($m) Write-Host "  [*] $m" -ForegroundColor Yellow; $script:Report.Add("  [*] $m") }
+function Write-Good { param($m) Write-Host "  [+] $m" -ForegroundColor Green;  $script:Report.Add("  [+] $m") }
+function Write-Info { param($m) Write-Host "  [-] $m" -ForegroundColor Gray;   $script:Report.Add("  [-] $m") }
+function Write-Sub  { param($m) Write-Host "      $m";                          $script:Report.Add("      $m") }
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 function Run { param($cmd)
@@ -78,7 +78,7 @@ function Get-SysInfo {
     Write-Banner "SYSTEM INFO"
     Write-Info "Hostname   : $env:COMPUTERNAME"
     Write-Info "User       : $(whoami)"
-    Write-Info "OS         : $((Get-WmiObject Win32_OperatingSystem).Caption)"
+    Write-Info "OS         : $((Get-CimInstance Win32_OperatingSystem).Caption)"
     Write-Info "Build      : $((Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber)"
     Write-Info "Arch       : $env:PROCESSOR_ARCHITECTURE"
     Write-Info "Domain     : $env:USERDOMAIN"
@@ -136,7 +136,8 @@ function Get-Services {
     Write-Banner "SERVICES — UNQUOTED PATHS & WEAK PERMISSIONS"
 
     Write-Info "Unquoted service paths:"
-    Get-WmiObject Win32_Service | Where-Object {
+    # Bug fix: Get-WmiObject removed in PowerShell 7+ — use Get-CimInstance throughout
+    Get-CimInstance Win32_Service | Where-Object {
         $_.PathName -and
         $_.PathName -notmatch '^"' -and
         $_.PathName -match ' ' -and
@@ -159,7 +160,7 @@ function Get-Services {
 
     Write-Host ""
     Write-Info "Checking service binary write permissions:"
-    Get-WmiObject Win32_Service | Where-Object { $_.PathName } | ForEach-Object {
+    Get-CimInstance Win32_Service | Where-Object { $_.PathName } | ForEach-Object {
         $bin = ($_.PathName -replace '"','') -split ' ' | Select-Object -First 1
         if ($bin -and (Test-Path $bin)) {
             if (Get-Acl-Write $bin) {
@@ -203,6 +204,8 @@ function Get-RegistryChecks {
             Write-Info "  $key"
             $props.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' } | ForEach-Object {
                 Write-Sub "    $($_.Name) = $($_.Value)"
+                # Bug fix: $_.Value can be null — calling .ToString() on null throws
+                if ($null -eq $_.Value) { return }
                 $bin = ([regex]::Match($_.Value.ToString(), '"?([A-Za-z]:\\[^"]+\.exe)')).Groups[1].Value
                 if ($bin -and (Test-Path $bin) -and (Get-Acl-Write $bin)) {
                     Write-Hit "    Writable AutoRun binary: $bin"
@@ -360,8 +363,9 @@ function Get-Network {
 function Get-Uac {
     Write-Banner "UAC"
     $uacKey  = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-    $consent = (Get-ItemProperty $uacKey).ConsentPromptBehaviorAdmin
-    $lual    = (Get-ItemProperty $uacKey).EnableLUA
+    $uacProp = Get-ItemProperty $uacKey -EA SilentlyContinue
+    $consent = $uacProp.ConsentPromptBehaviorAdmin
+    $lual    = $uacProp.EnableLUA
 
     Write-Info "EnableLUA                     : $lual"
     Write-Info "ConsentPromptBehaviorAdmin    : $consent"
@@ -374,14 +378,19 @@ function Get-Uac {
         4 = "Prompt for consent for non-Windows binaries"
         5 = "Prompt for consent for non-Windows binaries (default)"
     }
-    if ($levels.ContainsKey([int]$consent)) {
-        Write-Info "  → $($levels[[int]$consent])"
+    # Bug fix: $consent/$lual can be null if the properties aren't set.
+    # [int]$null == 0 which would match the level-0 and lual==0 checks as false positives.
+    # Guard with explicit null checks before any int cast or comparison.
+    if ($null -ne $consent) {
+        $consentInt = [int]$consent
+        if ($levels.ContainsKey($consentInt)) {
+            Write-Info "  → $($levels[$consentInt])"
+        }
+        if ($consentInt -in @(0,4,5)) {
+            Write-Hit "UAC level $consentInt — fodhelper, eventvwr, or other auto-elevate bypasses likely work"
+        }
     }
-
-    if ($consent -in @(0,4,5)) {
-        Write-Hit "UAC level $consent — fodhelper, eventvwr, or other auto-elevate bypasses likely work"
-    }
-    if ($lual -eq 0) {
+    if ($null -ne $lual -and [int]$lual -eq 0) {
         Write-Hit "EnableLUA = 0 — UAC completely disabled!"
     }
 
